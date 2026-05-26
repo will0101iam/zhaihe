@@ -6,6 +6,7 @@ type LlmConfig = {
   apiKey?: string;
   apiUrl?: string;
   model?: string;
+  modelFallbacks?: string[];
 };
 
 type LlmRawResponse = {
@@ -26,7 +27,21 @@ type LlmRawResponse = {
 };
 
 export const DEFAULT_LLM_API_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
-export const DEFAULT_LLM_MODEL = 'qwen3.5-flash';
+export const DEFAULT_LLM_MODEL_CANDIDATES = [
+  'qwen3.6-flash-2026-04-16',
+  'qwen3.7-max-2026-05-17',
+  'qwen3.6-plus-2026-04-02',
+  'qwen3.7-max-preview',
+  'qwen3.6-plus',
+  'qwen3.5-plus-2026-04-20',
+  'qwen3.6-max-preview',
+  'qwen3.7-max',
+  'qwen3.7-max-2026-05-20',
+  'qwen3.6-flash',
+  'qwen3.6-27b',
+] as const;
+export const DEFAULT_LLM_MODEL = DEFAULT_LLM_MODEL_CANDIDATES[0];
+const FREE_TIER_EXHAUSTED_PATTERN = /free tier of the model has been exhausted/i;
 
 function extractJson(text: string): unknown {
   const trimmed = text.trim();
@@ -47,6 +62,22 @@ function readModelText(payload: LlmRawResponse): string {
     payload?.output_text ??
     ''
   );
+}
+
+function isFreeTierExhaustedError(message: string): boolean {
+  return FREE_TIER_EXHAUSTED_PATTERN.test(message);
+}
+
+function getModelCandidates(config: LlmConfig): string[] {
+  const configured = [config.model, ...(config.modelFallbacks ?? [])]
+    .map((item) => item?.trim())
+    .filter((item): item is string => Boolean(item));
+
+  if (configured.length === 0) {
+    return [...DEFAULT_LLM_MODEL_CANDIDATES];
+  }
+
+  return [...new Set(configured)];
 }
 
 function assertVisionContentWasUsed(input: FengshuiAnalyzeRequest, report: FengshuiAnalyzeResponse) {
@@ -78,43 +109,55 @@ export async function analyzeWithLlm(
   }
 
   const apiUrl = config.apiUrl ?? DEFAULT_LLM_API_URL;
-  const model = config.model ?? DEFAULT_LLM_MODEL;
+  const models = getModelCandidates(config);
   const messages = buildLlmMessages(input);
+  let lastError: Error | undefined;
 
-  const response = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: 0.35,
-      stream: false,
-    }),
-  });
+  for (const model of models) {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: 0.35,
+        stream: false,
+      }),
+    });
 
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`LLM 调用失败：${response.status} ${detail.slice(0, 160)}`);
+    if (!response.ok) {
+      const detail = await response.text();
+      const error = new Error(`LLM 调用失败：${response.status} ${detail.slice(0, 160)}`);
+
+      if (response.status === 403 && isFreeTierExhaustedError(detail) && model !== models.at(-1)) {
+        lastError = error;
+        continue;
+      }
+
+      throw error;
+    }
+
+    const payload = await response.json();
+    const text = readModelText(payload);
+
+    if (!text) {
+      throw new Error('LLM 响应为空');
+    }
+
+    const report = normalizeReport({
+      ...(extractJson(text) as Partial<FengshuiAnalyzeResponse>),
+      meta: {
+        source: 'dashscope',
+      },
+    });
+
+    assertVisionContentWasUsed(input, report);
+
+    return report;
   }
 
-  const payload = await response.json();
-  const text = readModelText(payload);
-
-  if (!text) {
-    throw new Error('LLM 响应为空');
-  }
-
-  const report = normalizeReport({
-    ...(extractJson(text) as Partial<FengshuiAnalyzeResponse>),
-    meta: {
-      source: 'dashscope',
-    },
-  });
-
-  assertVisionContentWasUsed(input, report);
-
-  return report;
+  throw lastError ?? new Error('LLM 调用失败：所有候选模型都不可用');
 }

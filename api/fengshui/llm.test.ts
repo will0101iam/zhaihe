@@ -3,6 +3,9 @@ import { test } from 'node:test';
 import { analyzeWithLlm } from './llm.js';
 import type { FengshuiAnalyzeRequest, FengshuiAnalyzeResponse } from '../../shared/fengshui.js';
 
+type MockFetchInput = Parameters<typeof fetch>[0];
+type MockFetchInit = Parameters<typeof fetch>[1];
+
 const requestWithImage: FengshuiAnalyzeRequest = {
   house: {
     communityName: '江南里',
@@ -41,6 +44,19 @@ function reportWithSummary(summary: string): FengshuiAnalyzeResponse {
   };
 }
 
+function successfulReport(): FengshuiAnalyzeResponse {
+  return {
+    score: 86,
+    level: '比较适合',
+    summary: '外局与居住者信息基本相合，适合继续细看。',
+    strengths: ['南向采光较稳，利于纳气。'],
+    concerns: ['入户动线仍需结合实地再看。'],
+    suggestions: [{ title: '现场复核', reason: '核对户型与外局细节', action: '带着户型图去现场复核动线与采光。' }],
+    confidence: { level: '中', missingInfo: ['实地噪音情况'] },
+    disclaimer: '仅供参考',
+  };
+}
+
 test('analyzeWithLlm rejects reports that indicate uploaded floor plan was not received', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () =>
@@ -65,6 +81,88 @@ test('analyzeWithLlm rejects reports that indicate uploaded floor plan was not r
     }),
     /当前 LLM 接口没有接收到户型图视觉内容/,
   );
+
+  globalThis.fetch = originalFetch;
+});
+
+test('analyzeWithLlm falls back to the next model when the current free tier is exhausted', async () => {
+  const originalFetch = globalThis.fetch;
+  const calledModels: string[] = [];
+  let callCount = 0;
+
+  globalThis.fetch = async (_input: MockFetchInput, init?: MockFetchInit) => {
+    const body = JSON.parse(String(init?.body ?? '{}')) as { model?: string };
+    calledModels.push(String(body.model ?? ''));
+    callCount += 1;
+
+    if (callCount === 1) {
+      return new Response(
+        JSON.stringify({
+          error: {
+            message:
+              'The free tier of the model has been exhausted. If you wish to continue access the model on a paid basis, please disable the "use free tier"',
+          },
+        }),
+        { status: 403, headers: { 'content-type': 'application/json' } },
+      );
+    }
+
+    return new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify(successfulReport()),
+            },
+          },
+        ],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  const report = await analyzeWithLlm(requestWithImage, {
+    apiKey: 'test-key',
+    apiUrl: 'https://example.com/v1/chat/completions',
+    model: 'qwen3.6-flash-2026-04-16',
+    modelFallbacks: ['qwen3.7-max-2026-05-17'],
+  });
+
+  assert.equal(report.level, '比较适合');
+  assert.deepEqual(calledModels, ['qwen3.6-flash-2026-04-16', 'qwen3.7-max-2026-05-17']);
+
+  globalThis.fetch = originalFetch;
+});
+
+test('analyzeWithLlm does not fall back when the error is not free-tier exhaustion', async () => {
+  const originalFetch = globalThis.fetch;
+  const calledModels: string[] = [];
+
+  globalThis.fetch = async (_input: MockFetchInput, init?: MockFetchInit) => {
+    const body = JSON.parse(String(init?.body ?? '{}')) as { model?: string };
+    calledModels.push(String(body.model ?? ''));
+
+    return new Response(
+      JSON.stringify({
+        error: {
+          message: 'Invalid API key',
+        },
+      }),
+      { status: 403, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  await assert.rejects(
+    analyzeWithLlm(requestWithImage, {
+      apiKey: 'test-key',
+      apiUrl: 'https://example.com/v1/chat/completions',
+      model: 'qwen3.6-flash-2026-04-16',
+      modelFallbacks: ['qwen3.7-max-2026-05-17'],
+    }),
+    /LLM 调用失败：403/,
+  );
+
+  assert.deepEqual(calledModels, ['qwen3.6-flash-2026-04-16']);
 
   globalThis.fetch = originalFetch;
 });

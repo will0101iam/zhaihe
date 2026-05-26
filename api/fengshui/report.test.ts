@@ -30,8 +30,8 @@ const request: FengshuiAnalyzeRequest = {
   },
 };
 
-test('LLM defaults target DashScope Qwen 3.5 Flash chat completions API', () => {
-  assert.equal(DEFAULT_LLM_MODEL, 'qwen3.5-flash');
+test('LLM defaults target the first model in the DashScope fallback chain', () => {
+  assert.equal(DEFAULT_LLM_MODEL, 'qwen3.6-flash-2026-04-16');
   assert.equal(DEFAULT_LLM_API_URL, 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions');
 });
 

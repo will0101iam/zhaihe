@@ -12,3 +12,7 @@ export function getReportSourceLabel(source: FengshuiAnalyzeResponse['meta'] ext
       return '未知渠道';
   }
 }
+
+export function getReportFallbackLabel(_meta: FengshuiAnalyzeResponse['meta']) {
+  return undefined;
+}

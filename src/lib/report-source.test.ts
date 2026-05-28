@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { getReportSourceLabel } from './report-source.js';
+import { getReportSourceLabel, getReportFallbackLabel } from './report-source.js';
 
 test('getReportSourceLabel maps deepseek to DeepSeek', () => {
   assert.equal(getReportSourceLabel('deepseek'), 'DeepSeek');
@@ -16,4 +16,15 @@ test('getReportSourceLabel maps demo to 示例报告', () => {
 
 test('getReportSourceLabel falls back to 未知渠道 when source is missing', () => {
   assert.equal(getReportSourceLabel(undefined), '未知渠道');
+});
+
+test('getReportFallbackLabel hides deepseek fallback reason from the report page', () => {
+  assert.equal(
+    getReportFallbackLabel({
+      source: 'dashscope',
+      fallbackFrom: 'deepseek',
+      fallbackReason: 'DeepSeek 当前不可用，已自动切换到 Qwen。',
+    }),
+    undefined,
+  );
 });

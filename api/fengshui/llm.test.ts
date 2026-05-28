@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { analyzeWithLlm, analyzeWithProviderFallback } from './llm.js';
+import { analyzeWithLlm, analyzeWithProviderFallback, DEFAULT_LLM_MODEL_CANDIDATES } from './llm.js';
 import type { FengshuiAnalyzeRequest, FengshuiAnalyzeResponse } from '../../shared/fengshui.js';
 
 type MockFetchInput = Parameters<typeof fetch>[0];
@@ -28,6 +28,14 @@ const requestWithImage: FengshuiAnalyzeRequest = {
     fiveElementsInfo: '偏缺木水',
     birthYearOrZodiac: '1990',
     workIndustry: '互联网',
+  },
+};
+
+const requestWithoutImage: FengshuiAnalyzeRequest = {
+  ...requestWithImage,
+  house: {
+    ...requestWithImage.house,
+    floorPlanImage: undefined,
   },
 };
 
@@ -188,7 +196,7 @@ test('analyzeWithProviderFallback returns DeepSeek result first when the primary
     );
   };
 
-  const report = await analyzeWithProviderFallback(requestWithImage, {
+  const report = await analyzeWithProviderFallback(requestWithoutImage, {
     primary: {
       apiKey: 'deepseek-key',
       apiUrl: 'https://api.deepseek.com/chat/completions',
@@ -243,7 +251,7 @@ test('analyzeWithProviderFallback falls back to DashScope when DeepSeek provider
     );
   };
 
-  const report = await analyzeWithProviderFallback(requestWithImage, {
+  const report = await analyzeWithProviderFallback(requestWithoutImage, {
     primary: {
       apiKey: 'deepseek-key',
       apiUrl: 'https://api.deepseek.com/chat/completions',
@@ -269,4 +277,58 @@ test('analyzeWithProviderFallback falls back to DashScope when DeepSeek provider
   assert.deepEqual(calledModels, ['qwen3.6-flash-2026-04-16']);
 
   globalThis.fetch = originalFetch;
+});
+
+test('analyzeWithProviderFallback skips DeepSeek when the request includes a floor plan image', async () => {
+  const originalFetch = globalThis.fetch;
+  const calledUrls: string[] = [];
+  const calledModels: string[] = [];
+
+  globalThis.fetch = async (input: MockFetchInput, init?: MockFetchInit) => {
+    const url = String(input);
+    calledUrls.push(url);
+    const body = JSON.parse(String(init?.body ?? '{}')) as { model?: string };
+    calledModels.push(String(body.model ?? ''));
+
+    return new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify(successfulReport()),
+            },
+          },
+        ],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  const report = await analyzeWithProviderFallback(requestWithImage, {
+    primary: {
+      apiKey: 'deepseek-key',
+      apiUrl: 'https://api.deepseek.com/chat/completions',
+      model: 'deepseek-v4-flash',
+      source: 'deepseek',
+    },
+    secondary: {
+      apiKey: 'dashscope-key',
+      apiUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+      model: 'qwen3.6-flash-2026-04-16',
+      modelFallbacks: ['qwen3.7-max-2026-05-17'],
+      source: 'dashscope',
+    },
+  });
+
+  assert.equal(report.meta?.source, 'dashscope');
+  assert.equal(report.meta?.fallbackFrom, 'deepseek');
+  assert.match(report.meta?.fallbackReason ?? '', /户型图|视觉/);
+  assert.deepEqual(calledUrls, ['https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions']);
+  assert.deepEqual(calledModels, ['qwen3.6-flash-2026-04-16']);
+
+  globalThis.fetch = originalFetch;
+});
+
+test('DEFAULT_LLM_MODEL_CANDIDATES keeps qwen3.5-flash as the final fallback model', () => {
+  assert.equal(DEFAULT_LLM_MODEL_CANDIDATES.at(-1), 'qwen3.5-flash');
 });

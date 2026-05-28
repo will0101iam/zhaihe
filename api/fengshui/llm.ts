@@ -15,8 +15,18 @@ type ProviderFallbackConfig = {
   secondary?: LlmConfig;
 };
 
+const DEEPSEEK_VISION_SKIP_REASON = '当前请求包含户型图，DeepSeek 官方直连暂不支持 image_url 视觉消息，已自动切换到 Qwen。';
+
 function sanitizeProviderErrorMessage(message: string): string {
   return message.replace(/\s+/g, ' ').trim().slice(0, 160);
+}
+
+function shouldSkipPrimaryProvider(input: FengshuiAnalyzeRequest, config?: LlmConfig): string | undefined {
+  if (config?.source === 'deepseek' && input.house.floorPlanImage) {
+    return DEEPSEEK_VISION_SKIP_REASON;
+  }
+
+  return undefined;
 }
 
 type LlmRawResponse = {
@@ -51,6 +61,7 @@ export const DEFAULT_LLM_MODEL_CANDIDATES = [
   'qwen3.7-max-2026-05-20',
   'qwen3.6-flash',
   'qwen3.6-27b',
+  'qwen3.5-flash',
 ] as const;
 export const DEFAULT_LLM_MODEL = DEFAULT_LLM_MODEL_CANDIDATES[0];
 const FREE_TIER_EXHAUSTED_PATTERN = /free tier of the model has been exhausted/i;
@@ -180,8 +191,9 @@ export async function analyzeWithProviderFallback(
   config: ProviderFallbackConfig,
 ): Promise<FengshuiAnalyzeResponse> {
   let primaryError: Error | undefined;
+  const primarySkipReason = shouldSkipPrimaryProvider(input, config.primary);
 
-  if (config.primary?.apiKey) {
+  if (config.primary?.apiKey && !primarySkipReason) {
     try {
       return await analyzeWithLlm(input, config.primary);
     } catch (error) {
@@ -189,6 +201,9 @@ export async function analyzeWithProviderFallback(
       const primarySource = config.primary.source ?? 'primary';
       console.warn(`[LLM] primary provider failed: ${primarySource} - ${sanitizeProviderErrorMessage(primaryError.message)}`);
     }
+  } else if (config.primary?.apiKey && primarySkipReason) {
+    primaryError = new Error(primarySkipReason);
+    console.info(`[LLM] primary provider skipped: ${config.primary.source ?? 'primary'} - ${primarySkipReason}`);
   }
 
   if (config.secondary?.apiKey) {

@@ -2,7 +2,7 @@ import { Compass, Download, Home, ShieldCheck, Sparkles } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import type { FengshuiAnalyzeResponse } from '../../shared/fengshui.js';
-import { getReportSourceLabel } from '../lib/report-source.js';
+import { getReportFallbackLabel, getReportSourceLabel } from '../lib/report-source.js';
 import { downloadDataUrl, generateShareCardImage, OFFICIAL_SHARE_URL } from '../lib/share-card.js';
 
 type ReportViewProps = {
@@ -13,10 +13,7 @@ type ReportViewProps = {
 export default function ReportView({ report, notice }: ReportViewProps) {
   const [isGeneratingShareCard, setIsGeneratingShareCard] = useState(false);
   const reportSourceLabel = getReportSourceLabel(report.meta?.source);
-  const fallbackNotice =
-    report.meta?.fallbackFrom === 'deepseek' && report.meta.fallbackReason
-      ? `DeepSeek 当前不可用，已自动切换：${report.meta.fallbackReason}`
-      : undefined;
+  const fallbackNotice = getReportFallbackLabel(report.meta);
 
   async function handleDownloadShareCard() {
     setIsGeneratingShareCard(true);

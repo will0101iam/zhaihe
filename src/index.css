@@ -430,6 +430,13 @@ textarea {
   letter-spacing: .02em;
 }
 
+.report-fallback {
+  display: block;
+  margin-top: 6px;
+  color: rgb(244 235 221 / 70%);
+  line-height: 1.5;
+}
+
 .score-orb {
   display: grid;
   width: 92px;

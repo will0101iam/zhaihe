@@ -260,6 +260,8 @@ test('analyzeWithProviderFallback falls back to DashScope when DeepSeek provider
   });
 
   assert.equal(report.meta?.source, 'dashscope');
+  assert.equal(report.meta?.fallbackFrom, 'deepseek');
+  assert.match(report.meta?.fallbackReason ?? '', /LLM 调用失败：500/);
   assert.deepEqual(calledUrls, [
     'https://api.deepseek.com/chat/completions',
     'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',

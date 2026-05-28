@@ -13,6 +13,10 @@ type ReportViewProps = {
 export default function ReportView({ report, notice }: ReportViewProps) {
   const [isGeneratingShareCard, setIsGeneratingShareCard] = useState(false);
   const reportSourceLabel = getReportSourceLabel(report.meta?.source);
+  const fallbackNotice =
+    report.meta?.fallbackFrom === 'deepseek' && report.meta.fallbackReason
+      ? `DeepSeek 当前不可用，已自动切换：${report.meta.fallbackReason}`
+      : undefined;
 
   async function handleDownloadShareCard() {
     setIsGeneratingShareCard(true);
@@ -36,6 +40,7 @@ export default function ReportView({ report, notice }: ReportViewProps) {
           <h2>{report.level}</h2>
           <p>{report.summary}</p>
           <small className="report-source">本次模型渠道：{reportSourceLabel}</small>
+          {fallbackNotice ? <small className="report-source report-fallback">{fallbackNotice}</small> : null}
         </div>
         <div className="score-orb">
           <strong>{report.score}</strong>

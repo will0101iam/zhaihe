@@ -15,6 +15,10 @@ type ProviderFallbackConfig = {
   secondary?: LlmConfig;
 };
 
+function sanitizeProviderErrorMessage(message: string): string {
+  return message.replace(/\s+/g, ' ').trim().slice(0, 160);
+}
+
 type LlmRawResponse = {
   choices?: Array<{
     message?: {
@@ -182,11 +186,22 @@ export async function analyzeWithProviderFallback(
       return await analyzeWithLlm(input, config.primary);
     } catch (error) {
       primaryError = error instanceof Error ? error : new Error('主渠道调用失败');
+      const primarySource = config.primary.source ?? 'primary';
+      console.warn(`[LLM] primary provider failed: ${primarySource} - ${sanitizeProviderErrorMessage(primaryError.message)}`);
     }
   }
 
   if (config.secondary?.apiKey) {
-    return analyzeWithLlm(input, config.secondary);
+    const report = await analyzeWithLlm(input, config.secondary);
+    if (primaryError) {
+      report.meta = {
+        ...report.meta,
+        fallbackFrom: config.primary?.source,
+        fallbackReason: sanitizeProviderErrorMessage(primaryError.message),
+      };
+    }
+
+    return report;
   }
 
   throw primaryError ?? new Error('未配置可用的 LLM 渠道');

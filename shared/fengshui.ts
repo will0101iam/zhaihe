@@ -50,5 +50,7 @@ export type FengshuiAnalyzeResponse = {
   meta?: {
     source: 'deepseek' | 'dashscope' | 'demo';
     configMissing?: boolean;
+    fallbackFrom?: 'deepseek' | 'dashscope';
+    fallbackReason?: string;
   };
 };

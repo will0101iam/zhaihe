@@ -48,7 +48,7 @@ export type FengshuiAnalyzeResponse = {
   };
   disclaimer: string;
   meta?: {
-    source: 'dashscope' | 'demo';
+    source: 'deepseek' | 'dashscope' | 'demo';
     configMissing?: boolean;
   };
 };

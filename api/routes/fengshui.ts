@@ -1,6 +1,11 @@
 import { Router, type Request, type Response } from 'express';
 import type { FengshuiAnalyzeRequest } from '../../shared/fengshui.js';
-import { analyzeWithLlm, DEFAULT_LLM_MODEL_CANDIDATES } from '../fengshui/llm.js';
+import {
+  analyzeWithProviderFallback,
+  DEFAULT_DEEPSEEK_API_URL,
+  DEFAULT_DEEPSEEK_MODEL,
+  DEFAULT_LLM_MODEL_CANDIDATES,
+} from '../fengshui/llm.js';
 import { createDemoReport } from '../fengshui/report.js';
 
 const router = Router();
@@ -43,6 +48,10 @@ function resolveModelCandidatesFromEnv(): string[] {
   return [configuredSingleModel, ...DEFAULT_LLM_MODEL_CANDIDATES.filter((item) => item !== configuredSingleModel)];
 }
 
+function hasAnyProviderKey(): boolean {
+  return Boolean(optionalEnv('DEEPSEEK_API_KEY') || optionalEnv('DASHSCOPE_API_KEY'));
+}
+
 router.post('/analyze-fengshui', async (req: Request, res: Response) => {
   const input = req.body as Partial<FengshuiAnalyzeRequest>;
 
@@ -54,24 +63,31 @@ router.post('/analyze-fengshui', async (req: Request, res: Response) => {
     return;
   }
 
-  const apiKey = process.env.DASHSCOPE_API_KEY;
-
-  if (!apiKey) {
+  if (!hasAnyProviderKey()) {
     res.status(200).json({
       success: true,
       report: createDemoReport(input),
-      notice: '当前未配置 DASHSCOPE_API_KEY，已返回示例报告。你提供 Key 后即可启用 Qwen 模型兜底链。',
+      notice: '当前未配置 DeepSeek 或 DashScope 的 API Key，已返回示例报告。你提供 Key 后即可启用正式 LLM 渠道。',
     });
     return;
   }
 
   try {
-    const [model, ...modelFallbacks] = resolveModelCandidatesFromEnv();
-    const report = await analyzeWithLlm(input, {
-      apiKey,
-      apiUrl: optionalEnv('DASHSCOPE_API_URL'),
-      model,
-      modelFallbacks,
+    const [dashscopeModel, ...dashscopeFallbacks] = resolveModelCandidatesFromEnv();
+    const report = await analyzeWithProviderFallback(input, {
+      primary: {
+        apiKey: optionalEnv('DEEPSEEK_API_KEY'),
+        apiUrl: optionalEnv('DEEPSEEK_API_URL') ?? DEFAULT_DEEPSEEK_API_URL,
+        model: optionalEnv('DEEPSEEK_MODEL') ?? DEFAULT_DEEPSEEK_MODEL,
+        source: 'deepseek',
+      },
+      secondary: {
+        apiKey: optionalEnv('DASHSCOPE_API_KEY'),
+        apiUrl: optionalEnv('DASHSCOPE_API_URL'),
+        model: dashscopeModel,
+        modelFallbacks: dashscopeFallbacks,
+        source: 'dashscope',
+      },
     });
 
     res.status(200).json({

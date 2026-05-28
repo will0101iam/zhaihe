@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { analyzeWithLlm } from './llm.js';
+import { analyzeWithLlm, analyzeWithProviderFallback } from './llm.js';
 import type { FengshuiAnalyzeRequest, FengshuiAnalyzeResponse } from '../../shared/fengshui.js';
 
 type MockFetchInput = Parameters<typeof fetch>[0];
@@ -162,6 +162,108 @@ test('analyzeWithLlm does not fall back when the error is not free-tier exhausti
     /LLM 调用失败：403/,
   );
 
+  assert.deepEqual(calledModels, ['qwen3.6-flash-2026-04-16']);
+
+  globalThis.fetch = originalFetch;
+});
+
+test('analyzeWithProviderFallback returns DeepSeek result first when the primary provider succeeds', async () => {
+  const originalFetch = globalThis.fetch;
+  const calledUrls: string[] = [];
+
+  globalThis.fetch = async (input: MockFetchInput) => {
+    calledUrls.push(String(input));
+
+    return new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify(successfulReport()),
+            },
+          },
+        ],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  const report = await analyzeWithProviderFallback(requestWithImage, {
+    primary: {
+      apiKey: 'deepseek-key',
+      apiUrl: 'https://api.deepseek.com/chat/completions',
+      model: 'deepseek-v4-flash',
+      source: 'deepseek',
+    },
+    secondary: {
+      apiKey: 'dashscope-key',
+      apiUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+      model: 'qwen3.6-flash-2026-04-16',
+      modelFallbacks: ['qwen3.7-max-2026-05-17'],
+      source: 'dashscope',
+    },
+  });
+
+  assert.equal(report.meta?.source, 'deepseek');
+  assert.deepEqual(calledUrls, ['https://api.deepseek.com/chat/completions']);
+
+  globalThis.fetch = originalFetch;
+});
+
+test('analyzeWithProviderFallback falls back to DashScope when DeepSeek provider fails', async () => {
+  const originalFetch = globalThis.fetch;
+  const calledUrls: string[] = [];
+  const calledModels: string[] = [];
+
+  globalThis.fetch = async (input: MockFetchInput, init?: MockFetchInit) => {
+    const url = String(input);
+    calledUrls.push(url);
+
+    if (url.includes('deepseek')) {
+      return new Response(JSON.stringify({ error: { message: 'DeepSeek temporary failure' } }), {
+        status: 500,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+
+    const body = JSON.parse(String(init?.body ?? '{}')) as { model?: string };
+    calledModels.push(String(body.model ?? ''));
+
+    return new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify(successfulReport()),
+            },
+          },
+        ],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    );
+  };
+
+  const report = await analyzeWithProviderFallback(requestWithImage, {
+    primary: {
+      apiKey: 'deepseek-key',
+      apiUrl: 'https://api.deepseek.com/chat/completions',
+      model: 'deepseek-v4-flash',
+      source: 'deepseek',
+    },
+    secondary: {
+      apiKey: 'dashscope-key',
+      apiUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+      model: 'qwen3.6-flash-2026-04-16',
+      modelFallbacks: ['qwen3.7-max-2026-05-17'],
+      source: 'dashscope',
+    },
+  });
+
+  assert.equal(report.meta?.source, 'dashscope');
+  assert.deepEqual(calledUrls, [
+    'https://api.deepseek.com/chat/completions',
+    'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+  ]);
   assert.deepEqual(calledModels, ['qwen3.6-flash-2026-04-16']);
 
   globalThis.fetch = originalFetch;

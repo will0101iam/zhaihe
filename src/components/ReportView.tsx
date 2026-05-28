@@ -2,7 +2,7 @@ import { Compass, Download, Home, ShieldCheck, Sparkles } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import type { FengshuiAnalyzeResponse } from '../../shared/fengshui.js';
-import { downloadDataUrl, generateShareCardImage } from '../lib/share-card.js';
+import { downloadDataUrl, generateShareCardImage, OFFICIAL_SHARE_URL } from '../lib/share-card.js';
 
 type ReportViewProps = {
   report: FengshuiAnalyzeResponse;
@@ -16,8 +16,7 @@ export default function ReportView({ report, notice }: ReportViewProps) {
     setIsGeneratingShareCard(true);
 
     try {
-      const shareUrl = window.location.origin;
-      const dataUrl = await generateShareCardImage(report, shareUrl);
+      const dataUrl = await generateShareCardImage(report, OFFICIAL_SHARE_URL);
       downloadDataUrl(dataUrl, '宅合分享图.png');
     } catch (error) {
       window.alert(error instanceof Error ? error.message : '分享图生成失败，请稍后重试。');

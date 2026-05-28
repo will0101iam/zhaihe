@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildShareCardPayload } from './share-card.js';
+import { buildShareCardPayload, OFFICIAL_SHARE_URL } from './share-card.js';
 import type { FengshuiAnalyzeResponse } from '../../shared/fengshui.js';
 
 const report: FengshuiAnalyzeResponse = {
@@ -42,4 +42,8 @@ test('buildShareCardPayload shortens long summary and preserves the website url'
   assert.equal(payload.shareUrl, 'https://zhaihe.example/report?id=secret');
   assert.ok(payload.summary.length <= 66);
   assert.match(payload.summary, /…$/);
+});
+
+test('share card uses the official zhaihe website as the fixed share url', () => {
+  assert.equal(OFFICIAL_SHARE_URL, 'https://zhaihe.top');
 });

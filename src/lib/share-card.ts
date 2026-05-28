@@ -10,6 +10,8 @@ export type ShareCardPayload = {
   shareUrl: string;
 };
 
+export const OFFICIAL_SHARE_URL = 'https://zhaihe.top';
+
 const CARD_WIDTH = 900;
 const CARD_HEIGHT = 1360;
 const CARD_PADDING = 64;

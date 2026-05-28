@@ -2,6 +2,7 @@ import { Compass, Download, Home, ShieldCheck, Sparkles } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import type { FengshuiAnalyzeResponse } from '../../shared/fengshui.js';
+import { getReportSourceLabel } from '../lib/report-source.js';
 import { downloadDataUrl, generateShareCardImage, OFFICIAL_SHARE_URL } from '../lib/share-card.js';
 
 type ReportViewProps = {
@@ -11,6 +12,7 @@ type ReportViewProps = {
 
 export default function ReportView({ report, notice }: ReportViewProps) {
   const [isGeneratingShareCard, setIsGeneratingShareCard] = useState(false);
+  const reportSourceLabel = getReportSourceLabel(report.meta?.source);
 
   async function handleDownloadShareCard() {
     setIsGeneratingShareCard(true);
@@ -33,6 +35,7 @@ export default function ReportView({ report, notice }: ReportViewProps) {
           <span className="eyebrow">宅合指数</span>
           <h2>{report.level}</h2>
           <p>{report.summary}</p>
+          <small className="report-source">本次模型渠道：{reportSourceLabel}</small>
         </div>
         <div className="score-orb">
           <strong>{report.score}</strong>

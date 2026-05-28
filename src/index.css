@@ -422,6 +422,14 @@ textarea {
   color: rgb(244 235 221 / 74%);
 }
 
+.report-source {
+  display: inline-block;
+  margin-top: 10px;
+  color: rgb(244 235 221 / 88%);
+  font-size: .82rem;
+  letter-spacing: .02em;
+}
+
 .score-orb {
   display: grid;
   width: 92px;

@@ -1,12 +1,21 @@
 import QRCode from 'qrcode';
 import type { FengshuiAnalyzeResponse } from '../../shared/fengshui.js';
+import { deriveViralReport, type ShareTemplateId } from './report-viral.js';
 
 export type ShareCardPayload = {
+  template: ShareTemplateId;
   score: number;
-  level: string;
-  summary: string;
-  strengths: string[];
-  concerns: string[];
+  shareTitle: string;
+  relationshipTag: string;
+  relationshipType: string;
+  relationshipSubtitle: string;
+  elementRelation: string;
+  livingAdvice: string;
+  riskHint: string;
+  oneLineVerdict: string;
+  shareHook: string;
+  highlights: string[];
+  watchouts: string[];
   shareUrl: string;
 };
 
@@ -22,19 +31,37 @@ const GOLD = '#c59a52';
 const MUTED = 'rgba(16, 37, 34, 0.68)';
 const LIGHT_CARD = 'rgba(255, 255, 255, 0.72)';
 
-export function buildShareCardPayload(report: FengshuiAnalyzeResponse, shareUrl: string): ShareCardPayload {
+export function buildShareCardPayload(
+  report: FengshuiAnalyzeResponse,
+  shareUrl: string,
+  template: ShareTemplateId = 'story',
+): ShareCardPayload {
+  const viral = deriveViralReport(report);
+
   return {
+    template,
     score: report.score,
-    level: report.level,
-    summary: truncateText(report.summary, 65),
-    strengths: report.strengths.slice(0, 2),
-    concerns: report.concerns.slice(0, 2),
+    shareTitle: '你和这个房子的关系',
+    relationshipTag: viral.relationshipTag,
+    relationshipType: viral.relationshipType,
+    relationshipSubtitle: viral.relationshipSubtitle,
+    elementRelation: viral.elementRelation,
+    livingAdvice: truncateText(viral.livingAdvice, 28),
+    riskHint: truncateText(viral.riskHint, 28),
+    oneLineVerdict: truncateText(viral.oneLineVerdict, 65),
+    shareHook: viral.shareHook,
+    highlights: report.strengths.slice(0, 2),
+    watchouts: report.concerns.slice(0, 2),
     shareUrl,
   };
 }
 
-export async function generateShareCardImage(report: FengshuiAnalyzeResponse, shareUrl: string): Promise<string> {
-  const payload = buildShareCardPayload(report, shareUrl);
+export async function generateShareCardImage(
+  report: FengshuiAnalyzeResponse,
+  shareUrl: string,
+  template: ShareTemplateId = 'story',
+): Promise<string> {
+  const payload = buildShareCardPayload(report, shareUrl, template);
   const qrDataUrl = await QRCode.toDataURL(payload.shareUrl, {
     margin: 1,
     width: 240,
@@ -68,11 +95,23 @@ export function downloadDataUrl(dataUrl: string, filename: string) {
 
 function drawShareCard(context: CanvasRenderingContext2D, payload: ShareCardPayload, qrImage: HTMLImageElement) {
   drawBackground(context);
-  drawHeader(context);
-  drawHero(context, payload);
-  drawInsightCard(context, '主要加分', payload.strengths, 560, SEAL, 'PLUS');
-  drawInsightCard(context, '需要关注', payload.concerns, 805, INK, 'WATCH');
-  drawFooter(context, payload.shareUrl, qrImage);
+  drawHeader(context, payload);
+
+  if (payload.template === 'rednote') {
+    drawRednoteHero(context, payload);
+    drawChecklistPanel(context, payload, 560);
+    drawQuotePanel(context, payload.relationshipSubtitle, payload.shareHook, 880, SEAL);
+  } else if (payload.template === 'story') {
+    drawStoryHero(context, payload);
+    drawInsightCard(context, '主要加分', payload.highlights, 520, SEAL, 'PLUS');
+    drawInsightCard(context, '需要关注', payload.watchouts, 770, INK, 'WATCH');
+  } else {
+    drawWechatHero(context, payload);
+    drawChecklistPanel(context, payload, 560);
+    drawQuotePanel(context, '一句话判断', payload.oneLineVerdict, 880, INK);
+  }
+
+  drawFooter(context, payload, qrImage);
 }
 
 function drawBackground(context: CanvasRenderingContext2D) {
@@ -95,32 +134,39 @@ function drawBackground(context: CanvasRenderingContext2D) {
   context.fill();
 }
 
-function drawHeader(context: CanvasRenderingContext2D) {
+function drawHeader(context: CanvasRenderingContext2D, payload: ShareCardPayload) {
   context.fillStyle = SEAL;
   context.font = '700 34px "Songti SC", "Noto Serif SC", serif';
   context.fillText('宅合 ZhaiHe', CARD_PADDING, 105);
 
   context.fillStyle = MUTED;
   context.font = '26px "PingFang SC", sans-serif';
-  context.fillText('买房前，先看这套房和你合不合', CARD_PADDING, 150);
+  const subtitle =
+    payload.template === 'rednote'
+      ? '适合发小红书的关系结果卡'
+      : payload.template === 'story'
+        ? '适合转给家人朋友一起看的长图版'
+        : '买房前，先看这套房和你合不合';
+  context.fillText(subtitle, CARD_PADDING, 150);
 }
 
-function drawHero(context: CanvasRenderingContext2D, payload: ShareCardPayload) {
+function drawWechatHero(context: CanvasRenderingContext2D, payload: ShareCardPayload) {
   roundRect(context, CARD_PADDING, 195, CARD_WIDTH - CARD_PADDING * 2, 300, 38);
   context.fillStyle = INK;
   context.fill();
 
   context.fillStyle = GOLD;
   context.font = '700 28px "PingFang SC", sans-serif';
-  context.fillText('同房不同命', CARD_PADDING + 36, 257);
+  context.fillText(payload.shareTitle, CARD_PADDING + 36, 257);
 
   context.fillStyle = PAPER;
   context.font = '700 62px "Songti SC", "Noto Serif SC", serif';
-  context.fillText(payload.level, CARD_PADDING + 36, 334);
+  context.fillText(payload.relationshipTag, CARD_PADDING + 36, 334);
 
   context.fillStyle = 'rgba(248, 240, 227, 0.74)';
   context.font = '26px "PingFang SC", sans-serif';
-  drawWrappedText(context, payload.summary, CARD_PADDING + 36, 390, 500, 38, 2);
+  drawWrappedText(context, payload.relationshipType, CARD_PADDING + 36, 390, 500, 38, 1);
+  drawWrappedText(context, payload.oneLineVerdict, CARD_PADDING + 36, 430, 500, 38, 2);
 
   context.strokeStyle = GOLD;
   context.lineWidth = 3;
@@ -134,6 +180,107 @@ function drawHero(context: CanvasRenderingContext2D, payload: ShareCardPayload) 
   context.font = '24px "PingFang SC", sans-serif';
   context.fillText('/100', 720, 384);
   context.textAlign = 'left';
+}
+
+function drawRednoteHero(context: CanvasRenderingContext2D, payload: ShareCardPayload) {
+  roundRect(context, CARD_PADDING, 195, CARD_WIDTH - CARD_PADDING * 2, 320, 42);
+  context.fillStyle = 'rgba(255, 255, 255, 0.82)';
+  context.fill();
+
+  drawPill(context, 'REDNOTE', CARD_PADDING + 34, 245, SEAL);
+  context.fillStyle = INK;
+  context.font = '700 62px "Songti SC", "Noto Serif SC", serif';
+  context.fillText(payload.relationshipTag, CARD_PADDING + 34, 332);
+
+  context.fillStyle = SEAL;
+  context.font = '700 30px "PingFang SC", sans-serif';
+  context.fillText(payload.relationshipType, CARD_PADDING + 34, 385);
+
+  context.fillStyle = MUTED;
+  context.font = '26px "PingFang SC", sans-serif';
+  drawWrappedText(context, payload.oneLineVerdict, CARD_PADDING + 34, 438, 520, 38, 2);
+
+  context.strokeStyle = SEAL;
+  context.lineWidth = 3;
+  circle(context, 720, 348, 82);
+  context.stroke();
+
+  context.fillStyle = INK;
+  context.font = '700 70px "PingFang SC", sans-serif';
+  context.textAlign = 'center';
+  context.fillText(String(payload.score), 720, 346);
+  context.font = '24px "PingFang SC", sans-serif';
+  context.fillText('/100', 720, 390);
+  context.textAlign = 'left';
+}
+
+function drawStoryHero(context: CanvasRenderingContext2D, payload: ShareCardPayload) {
+  roundRect(context, CARD_PADDING, 195, CARD_WIDTH - CARD_PADDING * 2, 260, 42);
+  context.fillStyle = INK;
+  context.fill();
+
+  context.fillStyle = GOLD;
+  context.font = '700 28px "PingFang SC", sans-serif';
+  context.fillText('同房不同命', CARD_PADDING + 36, 252);
+
+  context.fillStyle = PAPER;
+  context.font = '700 60px "Songti SC", "Noto Serif SC", serif';
+  context.fillText(payload.relationshipTag, CARD_PADDING + 36, 328);
+
+  context.font = '26px "PingFang SC", sans-serif';
+  drawWrappedText(context, payload.shareHook, CARD_PADDING + 36, 384, 520, 38, 2);
+
+  context.fillStyle = PAPER;
+  context.font = '700 40px "PingFang SC", sans-serif';
+  context.textAlign = 'center';
+  context.fillText(`${payload.score}/100`, 720, 328);
+  context.textAlign = 'left';
+}
+
+function drawChecklistPanel(context: CanvasRenderingContext2D, payload: ShareCardPayload, y: number) {
+  roundRect(context, CARD_PADDING, y, CARD_WIDTH - CARD_PADDING * 2, 270, 30);
+  context.fillStyle = LIGHT_CARD;
+  context.fill();
+
+  context.strokeStyle = 'rgba(16, 37, 34, 0.08)';
+  context.lineWidth = 2;
+  context.stroke();
+
+  const rows: Array<[string, string]> = [
+    ['五行关系', payload.elementRelation],
+    ['居住建议', payload.livingAdvice],
+    ['风险提醒', payload.riskHint],
+  ];
+
+  context.fillStyle = INK;
+  context.font = '700 34px "Songti SC", "Noto Serif SC", serif';
+  context.fillText('结果重点', CARD_PADDING + 30, y + 50);
+
+  let rowY = y + 102;
+  for (const [label, value] of rows) {
+    context.fillStyle = SEAL;
+    context.font = '700 22px "PingFang SC", sans-serif';
+    context.fillText(label, CARD_PADDING + 30, rowY);
+
+    context.fillStyle = MUTED;
+    context.font = '26px "PingFang SC", sans-serif';
+    drawWrappedText(context, value, CARD_PADDING + 150, rowY, CARD_WIDTH - CARD_PADDING * 2 - 190, 34, 1);
+    rowY += 62;
+  }
+}
+
+function drawQuotePanel(context: CanvasRenderingContext2D, title: string, body: string, y: number, accent: string) {
+  roundRect(context, CARD_PADDING, y, CARD_WIDTH - CARD_PADDING * 2, 145, 30);
+  context.fillStyle = 'rgba(255, 255, 255, 0.78)';
+  context.fill();
+
+  context.fillStyle = accent;
+  context.font = '700 24px "PingFang SC", sans-serif';
+  context.fillText(title, CARD_PADDING + 30, y + 42);
+
+  context.fillStyle = INK;
+  context.font = '700 34px "Songti SC", "Noto Serif SC", serif';
+  drawWrappedText(context, body, CARD_PADDING + 30, y + 90, CARD_WIDTH - CARD_PADDING * 2 - 60, 40, 2);
 }
 
 function drawInsightCard(context: CanvasRenderingContext2D, title: string, items: string[], y: number, accent: string, tag: string) {
@@ -165,7 +312,7 @@ function drawInsightCard(context: CanvasRenderingContext2D, title: string, items
   }
 }
 
-function drawFooter(context: CanvasRenderingContext2D, shareUrl: string, qrImage: HTMLImageElement) {
+function drawFooter(context: CanvasRenderingContext2D, payload: ShareCardPayload, qrImage: HTMLImageElement) {
   const qrSize = 178;
   roundRect(context, CARD_PADDING, 1065, CARD_WIDTH - CARD_PADDING * 2, 205, 30);
   context.fillStyle = 'rgba(255, 255, 255, 0.78)';
@@ -175,15 +322,15 @@ function drawFooter(context: CanvasRenderingContext2D, shareUrl: string, qrImage
 
   context.fillStyle = INK;
   context.font = '700 32px "Songti SC", "Noto Serif SC", serif';
-  context.fillText('扫码测测你的宅合指数', CARD_PADDING + 30, 1125);
+  context.fillText('扫码测测你的宅合结果', CARD_PADDING + 30, 1125);
 
   context.fillStyle = MUTED;
   context.font = '24px "PingFang SC", sans-serif';
-  drawWrappedText(context, '同一套房，不同人住，结果可能完全不一样。', CARD_PADDING + 30, 1172, 430, 36, 2);
+  drawWrappedText(context, payload.shareHook, CARD_PADDING + 30, 1172, 430, 36, 2);
 
   context.fillStyle = 'rgba(16, 37, 34, 0.46)';
   context.font = '20px "PingFang SC", sans-serif';
-  context.fillText(shortenUrl(shareUrl), CARD_PADDING + 30, 1252);
+  context.fillText(shortenUrl(payload.shareUrl), CARD_PADDING + 30, 1252);
 }
 
 function drawPill(context: CanvasRenderingContext2D, text: string, x: number, y: number, color: string) {

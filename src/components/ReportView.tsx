@@ -1,8 +1,8 @@
-import { Compass, Download, Home, ShieldCheck, Sparkles } from 'lucide-react';
+import { Compass, Download, Home, RefreshCcw, ShieldCheck, Sparkles } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import type { FengshuiAnalyzeResponse } from '../../shared/fengshui.js';
-import { getReportFallbackLabel, getReportSourceLabel } from '../lib/report-source.js';
+import { deriveViralReport } from '../lib/report-viral.js';
 import { downloadDataUrl, generateShareCardImage, OFFICIAL_SHARE_URL } from '../lib/share-card.js';
 
 type ReportViewProps = {
@@ -12,8 +12,7 @@ type ReportViewProps = {
 
 export default function ReportView({ report, notice }: ReportViewProps) {
   const [isGeneratingShareCard, setIsGeneratingShareCard] = useState(false);
-  const reportSourceLabel = getReportSourceLabel(report.meta?.source);
-  const fallbackNotice = getReportFallbackLabel(report.meta);
+  const viral = deriveViralReport(report);
 
   async function handleDownloadShareCard() {
     setIsGeneratingShareCard(true);
@@ -28,16 +27,25 @@ export default function ReportView({ report, notice }: ReportViewProps) {
     }
   }
 
+  function handleRetest() {
+    document.getElementById('assess')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   return (
     <section className="report-shell" aria-label="宅合分析报告">
       {notice ? <div className="notice">{notice}</div> : null}
-      <div className="score-card">
-        <div>
-          <span className="eyebrow">宅合指数</span>
-          <h2>{report.level}</h2>
-          <p>{report.summary}</p>
-          <small className="report-source">本次模型渠道：{reportSourceLabel}</small>
-          {fallbackNotice ? <small className="report-source report-fallback">{fallbackNotice}</small> : null}
+      <div className="score-card result-hero-card">
+        <div className="result-hero-copy">
+          <span className="eyebrow">宅合结果</span>
+          <div className="result-tag-row">
+            <strong className="result-tag">{viral.relationshipTag}</strong>
+            <span className="result-type">{viral.relationshipType}</span>
+          </div>
+          <h2>{viral.relationshipSubtitle}</h2>
+          <div className="result-verdict">
+            <span>一句话判断</span>
+            <p>{viral.oneLineVerdict}</p>
+          </div>
         </div>
         <div className="score-orb">
           <strong>{report.score}</strong>
@@ -45,15 +53,29 @@ export default function ReportView({ report, notice }: ReportViewProps) {
         </div>
       </div>
 
-      <button className="share-card-button" type="button" onClick={handleDownloadShareCard} disabled={isGeneratingShareCard}>
-        <span className="share-card-copy">
-          <strong>{isGeneratingShareCard ? '正在生成分享图...' : '生成朋友圈分享图'}</strong>
-          <small>带二维码，适合发给家人朋友一起看“同房不同命”</small>
-        </span>
-        <span className="share-card-icon" aria-hidden="true">
-          <Download size={20} />
-        </span>
-      </button>
+      <section className="viral-hook-card" aria-label="传播与分享">
+        <div className="viral-share-grid">
+          <div>
+            <span className="eyebrow">同房不同命</span>
+            <h3>{viral.shareHook}</h3>
+          </div>
+          <div className="viral-actions">
+            <button className="retest-button viral-retest" type="button" onClick={handleRetest}>
+              <RefreshCcw size={16} />
+              {viral.retestCta}
+            </button>
+            <button className="share-card-button" type="button" onClick={handleDownloadShareCard} disabled={isGeneratingShareCard}>
+              <span className="share-card-copy">
+                <strong>{isGeneratingShareCard ? '正在生成分享图...' : '下载分享长图'}</strong>
+                <small>保存为图片，方便转发给家人朋友一起看</small>
+              </span>
+              <span className="share-card-icon" aria-hidden="true">
+                <Download size={20} />
+              </span>
+            </button>
+          </div>
+        </div>
+      </section>
 
       <div className="split-list">
         <InfoBlock icon={<Sparkles size={18} />} title="主要加分" items={report.strengths} />

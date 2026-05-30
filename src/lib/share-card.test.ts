@@ -26,8 +26,11 @@ const report: FengshuiAnalyzeResponse = {
 test('buildShareCardPayload keeps only the most important points for a clean share image', () => {
   const payload = buildShareCardPayload(report, 'https://zhaihe.example');
 
-  assert.deepEqual(payload.strengths, ['南向采光纳阳。', '小区名有水木象。']);
-  assert.deepEqual(payload.concerns, ['东侧水势需要确认。', '附近公司人流偏旺。']);
+  assert.equal(payload.template, 'story');
+  assert.equal(payload.shareTitle, '你和这个房子的关系');
+  assert.equal(payload.shareUrl, 'https://zhaihe.example');
+  assert.ok(payload.relationshipTag.length > 0);
+  assert.ok(payload.oneLineVerdict.length > 0);
 });
 
 test('buildShareCardPayload shortens long summary and preserves the website url', () => {
@@ -39,9 +42,10 @@ test('buildShareCardPayload shortens long summary and preserves the website url'
     'https://zhaihe.example/report?id=secret',
   );
 
+  assert.equal(payload.template, 'story');
   assert.equal(payload.shareUrl, 'https://zhaihe.example/report?id=secret');
-  assert.ok(payload.summary.length <= 66);
-  assert.match(payload.summary, /…$/);
+  assert.ok(payload.oneLineVerdict.length <= 66);
+  assert.doesNotMatch(payload.oneLineVerdict, /…$/);
 });
 
 test('share card uses the official zhaihe website as the fixed share url', () => {
